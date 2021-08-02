@@ -11,5 +11,6 @@ public class FabricFennecsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         EntityRendererRegistry.INSTANCE.register(FabricFennecs.FENNEC, ctx -> new FennecRenderer(ctx));
+        boolean debug = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().indexOf(("-agentlib:jdwp")) > 0;
     }
 }

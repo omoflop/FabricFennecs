@@ -1,6 +1,5 @@
 package mod.omoflop.fabricfennecs.entity;
 
-import com.ibm.icu.impl.locale.XCldrStub;
 import mod.omoflop.fabricfennecs.FabricFennecs;
 import mod.omoflop.fabricfennecs.entity.goal.DigUpSandGoal;
 import mod.omoflop.fabricfennecs.entity.goal.FennecPickupItemGoal;
@@ -41,13 +40,12 @@ import software.bernie.geckolib3.core.event.predicate.AnimationEvent;
 import software.bernie.geckolib3.core.manager.AnimationData;
 import software.bernie.geckolib3.core.manager.AnimationFactory;
 
-import java.util.List;
 import java.util.Random;
-import java.util.UUID;
+import java.util.function.Predicate;
 
 public class FennecEntity extends TameableEntity implements IAnimatable {
 
-    private static final XCldrStub.Predicate<Entity> NOTICEABLE_PLAYER_FILTER = (entity) -> !entity.isSneaky() && EntityPredicates.EXCEPT_CREATIVE_OR_SPECTATOR.test(entity);
+    private static final Predicate<Entity> NOTICEABLE_PLAYER_FILTER = (entity) -> !entity.isSneaky() && EntityPredicates.EXCEPT_CREATIVE_OR_SPECTATOR.test(entity);
     private final AnimationFactory factory = new AnimationFactory(this);
     private FleeEntityGoal<FennecEntity> fleeGoal;
     private FollowOwnerGoal followOwnerGoal;
