@@ -21,6 +21,8 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.particle.ItemStackParticleEffect;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.predicate.entity.EntityPredicates;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvent;
@@ -28,6 +30,7 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 import software.bernie.geckolib3.core.IAnimatable;
@@ -67,12 +70,19 @@ public class FennecEntity extends TameableEntity implements IAnimatable {
 
     // Item things???
     @Override public Iterable<ItemStack> getArmorItems() {
-        return List.of(ItemStack.EMPTY);
+        return super.getArmorItems();
     }
     @Override public ItemStack getEquippedStack(EquipmentSlot slot) {
-        return ItemStack.EMPTY;
+        return super.getEquippedStack(slot);
     }
-    @Override public void equipStack(EquipmentSlot slot, ItemStack stack) {}
+    @Override public void equipStack(EquipmentSlot slot, ItemStack stack) {
+        super.equipStack(slot, stack);
+    }
+
+    @Override
+    public boolean canPickUpLoot() {
+        return true;
+    }
 
     // Default entity attributes
     public static DefaultAttributeContainer.Builder createEntityAttributes() {
@@ -176,22 +186,88 @@ public class FennecEntity extends TameableEntity implements IAnimatable {
             }
         }
     }
-
     @Override public void tickMovement() {
-        ItemStack itemStack = this.getEquippedStack(EquipmentSlot.MAINHAND);
-        if (FabricFennecs.FENNEC_FOODS.contains(itemStack.getItem())) {
-            if (getEatingTime() > 600) {
-                ItemStack itemStack2 = itemStack.finishUsing(this.world, this);
-                if (!itemStack2.isEmpty()) {
-                    this.equipStack(EquipmentSlot.MAINHAND, itemStack2);
-                }
+        super.tickMovement();
+        if (!this.world.isClient && this.isAlive() && this.canMoveVoluntarily()) {
+            ItemStack itemStack = this.getEquippedStack(EquipmentSlot.MAINHAND);
+            if (FabricFennecs.FENNEC_FOODS.contains(itemStack.getItem())) {
+                setEatingTime(getEatingTime()+1);
+                if (getEatingTime() > 600) {
+                    ItemStack itemStack2 = itemStack.finishUsing(this.world, this);
+                    itemStack2.decrement(1);
+                    System.out.println(itemStack2);
+                    if (!itemStack2.isEmpty()) {
+                        this.equipStack(EquipmentSlot.MAINHAND, itemStack2);
+                    }
 
-                setEatingTime(0);
-            } else if (getEatingTime() > 560 && this.random.nextFloat() < 0.1F) {
-                this.playSound(this.getEatSound(itemStack), 1.0F, 1.0F);
-                this.world.sendEntityStatus(this, (byte)45);
+                    setEatingTime(0);
+                } else if (getEatingTime() > 560 && this.random.nextFloat() < 0.1F) {
+                    this.playSound(this.getEatSound(itemStack), 1.0F, 1.0F);
+                    this.world.sendEntityStatus(this, (byte) 45);
+                }
             }
         }
+    }
+
+    public boolean canEquip(ItemStack stack) {
+        EquipmentSlot equipmentSlot = MobEntity.getPreferredEquipmentSlot(stack);
+        if (!this.getEquippedStack(equipmentSlot).isEmpty()) {
+            return false;
+        } else {
+            return equipmentSlot == EquipmentSlot.MAINHAND && super.canEquip(stack);
+        }
+    }
+    public boolean canPickupItem(ItemStack stack) {
+        Item item = stack.getItem();
+        ItemStack itemStack = this.getEquippedStack(EquipmentSlot.MAINHAND);
+        return itemStack.isEmpty() || getEatingTime() > 0 && item.isFood() && !itemStack.getItem().isFood();
+    }
+
+    private void spit(ItemStack stack) {
+        if (!stack.isEmpty() && !this.world.isClient) {
+            ItemEntity itemEntity = new ItemEntity(this.world, this.getX() + this.getRotationVector().x, this.getY() + 1.0D, this.getZ() + this.getRotationVector().z, stack);
+            itemEntity.setPickupDelay(40);
+            itemEntity.setThrower(this.getUuid());
+            this.playSound(SoundEvents.ENTITY_FOX_SPIT, 1.0F, 1.0F);
+            this.world.spawnEntity(itemEntity);
+        }
+    }
+    private void dropItem(ItemStack stack) {
+        ItemEntity itemEntity = new ItemEntity(this.world, this.getX(), this.getY(), this.getZ(), stack);
+        this.world.spawnEntity(itemEntity);
+    }
+    @Override protected void loot(ItemEntity item) {
+        ItemStack itemStack = item.getStack();
+        if (this.canPickupItem(itemStack)) {
+            int i = itemStack.getCount();
+            if (i > 1) {
+                this.dropItem(itemStack.split(i - 1));
+            }
+
+            this.spit(this.getEquippedStack(EquipmentSlot.MAINHAND));
+            this.triggerItemPickedUpByEntityCriteria(item);
+            this.equipStack(EquipmentSlot.MAINHAND, itemStack.split(1));
+            this.handDropChances[EquipmentSlot.MAINHAND.getEntitySlotId()] = 2.0F;
+            this.sendPickup(item, itemStack.getCount());
+            item.discard();
+            setEatingTime(0);
+        }
+
+    }
+
+    public void handleStatus(byte status) {
+        if (status == 45) {
+            ItemStack itemStack = this.getEquippedStack(EquipmentSlot.MAINHAND);
+            if (!itemStack.isEmpty()) {
+                for(int i = 0; i < 8; ++i) {
+                    Vec3d vec3d = (new Vec3d(((double)this.random.nextFloat() - 0.5D) * 0.1D, Math.random() * 0.1D + 0.1D, 0.0D)).rotateX(-this.getPitch() * 0.017453292F).rotateY(-this.getYaw() * 0.017453292F);
+                    this.world.addParticle(new ItemStackParticleEffect(ParticleTypes.ITEM, itemStack), this.getX() + this.getRotationVector().x / 2.0D, this.getY(), this.getZ() + this.getRotationVector().z / 2.0D, vec3d.x, vec3d.y + 0.05D, vec3d.z);
+                }
+            }
+        } else {
+            super.handleStatus(status);
+        }
+
     }
 
     private interface EventBooleanSupplier { boolean get(AnimationEvent event); }
@@ -385,11 +461,10 @@ public class FennecEntity extends TameableEntity implements IAnimatable {
     }
     private FleeEntityGoal makeFleeEntityGoal() {
         return new FleeEntityGoal(this, PlayerEntity.class, 16.0F, 1.6D, 1.4D,
-                (entity) -> NOTICEABLE_PLAYER_FILTER.test((Entity) entity) && !this.canTrust(((Entity) entity).getUuid()));
+                (entity) -> NOTICEABLE_PLAYER_FILTER.test((Entity) entity) && !this.isTamed());
     }
     private FollowOwnerGoal makeFollowOwnerGoal() {
         return new FollowOwnerGoal(this, 0.78d, 2.5f, 40f, false);
     }
-    private boolean canTrust(UUID uuid) { if (this.getOwnerUuid() == null) return false; return this.getOwnerUuid().equals(uuid); }
 
 }

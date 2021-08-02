@@ -11,19 +11,24 @@ import software.bernie.geckolib3.model.provider.data.EntityModelData;
 
 public class FennecModel extends AnimatedGeoModel<FennecEntity> {
 
+    public static final Identifier MODEL_LOCATION = new Identifier("fabricfennecs:geo/fennec.geo.json");
+
     @Override
     public Identifier getModelLocation(FennecEntity fennecEntity) {
-        return new Identifier("fabricfennecs:geo/fennec.geo.json");
+        return MODEL_LOCATION;
     }
 
     @Override
     public Identifier getTextureLocation(FennecEntity fennecEntity) {
+        String fennecName = "fennec";
+
         Text customName = fennecEntity.getCustomName();
         if (customName != null)
             if (customName.getString().equalsIgnoreCase("fennekal"))
-                return new Identifier("fabricfennecs:textures/entity/fennec/fennekal.png");
-
-        return new Identifier("fabricfennecs:textures/entity/fennec/fennec.png");
+                fennecName = "fennekal";
+        if (fennecEntity.isInSleepingPose())
+            fennecName += "_sleeping";
+        return new Identifier(String.format("fabricfennecs:textures/entity/fennec/%s.png", fennecName));
     }
 
     @Override
